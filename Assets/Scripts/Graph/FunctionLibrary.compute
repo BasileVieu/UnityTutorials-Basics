@@ -1,0 +1,167 @@
+#pragma kernel WaveKernel
+#pragma kernel WaveToMultiWaveKernel
+#pragma kernel WaveToRippleKernel
+#pragma kernel WaveToSphereKernel
+#pragma kernel WaveToTorusKernel
+
+#pragma kernel MultiWaveToWaveKernel
+#pragma kernel MultiWaveKernel
+#pragma kernel MultiWaveToRippleKernel
+#pragma kernel MultiWaveToSphereKernel
+#pragma kernel MultiWaveToTorusKernel
+
+#pragma kernel RippleToWaveKernel
+#pragma kernel RippleToMultiWaveKernel
+#pragma kernel RippleKernel
+#pragma kernel RippleToSphereKernel
+#pragma kernel RippleToTorusKernel
+
+#pragma kernel SphereToWaveKernel
+#pragma kernel SphereToMultiWaveKernel
+#pragma kernel SphereToRippleKernel
+#pragma kernel SphereKernel
+#pragma kernel SphereToTorusKernel
+
+#pragma kernel TorusToWaveKernel
+#pragma kernel TorusToMultiWaveKernel
+#pragma kernel TorusToRippleKernel
+#pragma kernel TorusToSphereKernel
+#pragma kernel TorusKernel
+
+#define PI 3.14159265358979323846
+
+RWStructuredBuffer<float3> _Positions;
+
+uint _Resolution;
+
+float _Step;
+float _Time;
+float _TransitionProgress;
+
+float2 GetUV(uint3 _id)
+{
+    return (_id.xy + 0.5) * _Step - 1.0;
+}
+
+void SetPosition(uint3 _id, float3 _position)
+{
+    if (_id.x < _Resolution
+        && _id.y < _Resolution)
+    {
+        _Positions[_id.x + _id.y * _Resolution] = _position;
+    }
+}
+
+float3 Wave(float _u, float _v, float _t)
+{
+    float3 p;
+    p.x = _u;
+    p.y = sin(PI * (_u + _v + _t));
+    p.z = _v;
+
+    return p;
+}
+
+float3 MultiWave(float _u, float _v, float _t)
+{
+    float3 p;
+    p.x = _u;
+    p.y = sin(PI * (_u + 0.5 * _t));
+    p.y += 0.5 * sin(2.0 * PI * (_v + _t));
+    p.y += sin(PI * (_u + _v + 0.25 * _t));
+    p.y *= 1.0 / 2.5;
+    p.z = _v;
+
+    return p;
+}
+
+float3 Ripple(float _u, float _v, float _t)
+{
+    float d = sqrt(_u * _u + _v * _v);
+
+    float3 p;
+    p.x = _u;
+    p.y = sin(PI * (4.0 * d - _t));
+    p.y /= 1.0 + 10.0 * d;
+    p.z = _v;
+
+    return p;
+}
+
+float3 Sphere(float _u, float _v, float _t)
+{
+    float r = 0.9 + 0.1 * sin(PI * (12.0 * _u + 8.0 * _v + _t));
+    float s = r * cos(0.5 * PI * _v);
+        
+    float3 p;
+    p.x = s * sin(PI * _u);
+    p.y = r * sin(PI * 0.5 * _v);
+    p.z = s * cos(PI * _u);
+
+    return p;
+}
+
+float3 Torus(float _u, float _v, float _t)
+{
+    float r1 = 0.7 + 0.1 * sin(PI * (8.0 * _u + 0.5 * _t));
+    float r2 = 0.15 + 0.05 * sin(PI * (16.0 * _u + 8.0 * _v + 3.0 * _t));
+    float s = r1 + r2 * cos(PI * _v);
+        
+    float3 p;
+    p.x = s * sin(PI * _u);
+    p.y = r2 * sin(PI * _v);
+    p.z = s * cos(PI * _u);
+
+    return p;
+}
+
+#define KERNEL_FUNCTION(function) \
+[numthreads(8, 8, 1)] \
+void function##Kernel(uint3 _id : SV_DispatchThreadID) \
+{ \
+    float2 uv = GetUV(_id); \
+\
+    SetPosition(_id, function(uv.x, uv.y, _Time)); \
+}
+
+#define KERNEL_MORPH_FUNCTION(functionA, functionB) \
+[numthreads(8, 8, 1)] \
+void functionA##To##functionB##Kernel(uint3 _id : SV_DispatchThreadID) \
+{ \
+    float2 uv = GetUV(_id); \
+\
+    float3 position = lerp(functionA(uv.x, uv.y, _Time), functionB(uv.x, uv.y, _Time), _TransitionProgress); \
+\
+    SetPosition(_id, position); \
+}
+
+KERNEL_FUNCTION(Wave)
+KERNEL_FUNCTION(MultiWave)
+KERNEL_FUNCTION(Ripple)
+KERNEL_FUNCTION(Sphere)
+KERNEL_FUNCTION(Torus)
+
+KERNEL_MORPH_FUNCTION(Wave, MultiWave)
+KERNEL_MORPH_FUNCTION(Wave, Ripple)
+KERNEL_MORPH_FUNCTION(Wave, Sphere)
+KERNEL_MORPH_FUNCTION(Wave, Torus)
+
+KERNEL_MORPH_FUNCTION(MultiWave, Wave)
+KERNEL_MORPH_FUNCTION(MultiWave, Ripple)
+KERNEL_MORPH_FUNCTION(MultiWave, Sphere)
+KERNEL_MORPH_FUNCTION(MultiWave, Torus)
+
+KERNEL_MORPH_FUNCTION(Ripple, Wave)
+KERNEL_MORPH_FUNCTION(Ripple, MultiWave)
+KERNEL_MORPH_FUNCTION(Ripple, Sphere)
+KERNEL_MORPH_FUNCTION(Ripple, Torus)
+
+KERNEL_MORPH_FUNCTION(Sphere, Wave)
+KERNEL_MORPH_FUNCTION(Sphere, MultiWave)
+KERNEL_MORPH_FUNCTION(Sphere, Ripple)
+KERNEL_MORPH_FUNCTION(Sphere, Torus)
+
+KERNEL_MORPH_FUNCTION(Torus, Wave)
+KERNEL_MORPH_FUNCTION(Torus, MultiWave)
+KERNEL_MORPH_FUNCTION(Torus, Ripple)
+KERNEL_MORPH_FUNCTION(Torus, Sphere)
